@@ -21,6 +21,7 @@ func NewAnalyzer(version, dataServer string) *Analyzer {
 // NotifyReviewEvent implements the lookout analyzer interface.
 func (a *Analyzer) NotifyReviewEvent(ctx context.Context, review *lookout.ReviewEvent) (*lookout.EventResponse, error) {
 	log.Infof("got review request %v", review)
+
 	return &lookout.EventResponse{AnalyzerVersion: a.version, Comments: nil}, nil
 }
 
