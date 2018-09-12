@@ -16,10 +16,11 @@ require (
 	github.com/onsi/gomega v1.4.1 // indirect
 	github.com/pkg/errors v0.8.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/sergi/go-diff v1.0.0
 	github.com/sirupsen/logrus v1.0.6 // indirect
 	github.com/sourcegraph/go-vcsurl v0.0.0-20161114165620-2305ecca26ab // indirect
 	github.com/src-d/envconfig v1.0.0 // indirect
-	github.com/stretchr/testify v1.2.2 // indirect
+	github.com/stretchr/testify v1.2.2
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	golang.org/x/crypto v0.0.0-20180910181607-0e37d006457b // indirect
 	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd // indirect
@@ -40,4 +41,5 @@ require (
 	gopkg.in/src-d/lookout-sdk.v0 v0.0.4
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.2.1 // indirect
+	honnef.co/go/tools v0.0.0-20180728063816-88497007e858
 )
