@@ -25,7 +25,12 @@ type Analyzer struct {
 	RequestFilesPush bool
 }
 
-var _ lookout.AnalyzerServer = &Analyzer{}
+var (
+	_ lookout.AnalyzerServer = &Analyzer{}
+
+	StructNames []string
+	StructLines []int
+)
 
 func (a *Analyzer) NotifyReviewEvent(ctx context.Context, e *lookout.ReviewEvent) (*lookout.EventResponse, error) {
 	fmt.Printf("REVIEW: %+v\n", e)
@@ -48,13 +53,15 @@ func (a *Analyzer) NotifyReviewEvent(ctx context.Context, e *lookout.ReviewEvent
 	var comments []*lookout.Comment
 	for changes.Next() {
 		change := changes.Change()
-		fmt.Printf("\t%s\n", change.Head.Path)
 
 		filename := filepath.Join(root, change.Head.Path)
-		structnames := getStructNames(filename)
+		fmt.Printf("%s\n", filename)
+		structnames, _ := getStructNames(filename)
 		for _, sname := range structnames {
+			fmt.Printf("\t%s\n", sname)
 			txt, e := isOK(root, filename, sname)
 			if e != nil {
+				log.Println(e)
 				continue
 			}
 
@@ -69,6 +76,8 @@ func (a *Analyzer) NotifyReviewEvent(ctx context.Context, e *lookout.ReviewEvent
 	if err := changes.Err(); err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("Comments: %+v\n", comments)
 
 	resp := &lookout.EventResponse{AnalyzerVersion: a.Version, Comments: comments}
 	return resp, nil
@@ -108,31 +117,31 @@ func clone(review *lookout.ReviewEvent) (string, error) {
 	return tmp, nil
 }
 
-func getStructNames(filename string) []string {
+func getStructNames(filename string) ([]string, []int) {
+	StructNames = StructNames[:0]
+	StructLines = StructLines[:0]
 	fs := token.NewFileSet()
 
 	f, err := parser.ParseFile(fs, filename, nil, parser.AllErrors)
 	if err != nil {
 		log.Printf("could not parse %s: %v", filename, err)
-		return nil
+		return nil, nil
 	}
 	v := newVisitor(f)
 	ast.Walk(v, f)
-	return v.structnames
+	return StructNames, StructLines
 }
 
 func isOK(dir, filename, structname string) (string, error) {
 	conf := loader.Config{
 		Build: &build.Default,
 	}
-
 	arr, err := conf.FromArgs([]string{filename}, true)
 	if err != nil {
 		log.Println(err)
 		return "", err
 	}
 	log.Println(arr)
-
 	lprog, err := conf.Load()
 	if err != nil {
 		log.Println(err)
@@ -152,14 +161,18 @@ func isOK(dir, filename, structname string) (string, error) {
 		log.Println("identifier is not a struct type")
 		return "", err
 	}
-
 	var comment string
 	fields := sizes(st, typ.(*types.Named).Obj().Name(), 0, nil)
 	for _, f := range fields {
 		comment += f.String() + "\n"
 	}
-
 	return comment, nil
+}
+
+func emitText(fields []Field) {
+	for _, field := range fields {
+		fmt.Println(field)
+	}
 }
 
 func sizes(typ *types.Struct, prefix string, base int64, out []Field) []Field {
@@ -176,6 +189,8 @@ func sizes(typ *types.Struct, prefix string, base int64, out []Field) []Field {
 
 	pos := base
 	for i, field := range fields {
+		fmt.Printf("\tfield: %v\n", field)
+
 		if offsets[i] > pos {
 			padding := offsets[i] - pos
 			out = append(out, Field{
@@ -240,8 +255,9 @@ func (v visitor) Visit(n ast.Node) ast.Visitor {
 	case *ast.GenDecl:
 		for _, spec := range d.Specs {
 			if t, ok := spec.(*ast.TypeSpec); ok {
-				fmt.Println(t.Name)
-				v.structnames = append(v.structnames, t.Name.String())
+				fmt.Printf("Name: %v Pos: %v End: %v TokPos: %v\n", t.Name, d.Pos(), d.End(), d.TokPos)
+				StructNames = append(StructNames, t.Name.String())
+				StructLines = append(StructLines, int(t.Name.Pos()))
 			}
 		}
 	}
@@ -261,7 +277,7 @@ type Field struct {
 
 func (f Field) String() string {
 	if f.IsPadding {
-		return fmt.Sprintf("%s: %d-%d (size %d, align %d)",
+		return fmt.Sprintf("*%s: %d-%d (size %d, align %d)*",
 			"padding", f.Start, f.End, f.Size, f.Align)
 	}
 	return fmt.Sprintf("%s %s: %d-%d (size %d, align %d)",
