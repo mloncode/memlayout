@@ -1,6 +1,9 @@
 package memlayout
 
 import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -31,10 +34,19 @@ type Qux struct {
 }
 `
 
-func TestStructsFromSource(t *testing.T) {
+func TestStructsFromFile(t *testing.T) {
 	require := require.New(t)
 
-	structs, err := StructsFromSource("test.go", []byte(testSource))
+	tmp, err := ioutil.TempDir(os.TempDir(), "tmp-memlayout")
+	require.NoError(err)
+	defer func() {
+		require.NoError(os.RemoveAll(tmp))
+	}()
+
+	path := filepath.Join(tmp, "test.go")
+	require.NoError(ioutil.WriteFile(path, []byte(testSource), 0755))
+
+	structs, err := StructsFromFile(path, []byte(testSource))
 	require.NoError(err)
 
 	expected := []Struct{

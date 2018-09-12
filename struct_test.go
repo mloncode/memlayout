@@ -1,6 +1,9 @@
 package memlayout
 
 import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,7 +24,16 @@ type Foo struct {
 func TestOptimize(t *testing.T) {
 	require := require.New(t)
 
-	structs, err := StructsFromSource("foo.go", []byte(unoptimized))
+	tmp, err := ioutil.TempDir(os.TempDir(), "tmp-memlayout")
+	require.NoError(err)
+	defer func() {
+		require.NoError(os.RemoveAll(tmp))
+	}()
+
+	path := filepath.Join(tmp, "test.go")
+	require.NoError(ioutil.WriteFile(path, []byte(unoptimized), 0755))
+
+	structs, err := StructsFromFile(path, []byte(unoptimized))
 	require.NoError(err)
 	require.Len(structs, 1)
 

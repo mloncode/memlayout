@@ -12,6 +12,7 @@ import (
 	"golang.org/x/tools/go/loader"
 )
 
+// StructsFromFile returns the structs in the file with the given content.
 func StructsFromFile(filename string, content []byte) ([]Struct, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filename, content, 0)
