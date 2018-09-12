@@ -14,7 +14,7 @@ import (
 
 const (
 	version           = "dev"
-	defaultPort       = 3456
+	defaultPort       = 3455
 	defaultDataServer = "localhost:10301"
 	maxMessageSize    = 100 * 1024 * 1024 // 100mb
 )

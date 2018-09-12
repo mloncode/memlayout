@@ -1,43 +1,43 @@
 package memlayout
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
-	"go/importer"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"path/filepath"
 
-	log "gopkg.in/src-d/go-log.v1"
+	"golang.org/x/tools/go/loader"
 )
 
-// ErrNoTypeCheck is returned when the source cannot be type checked.
-var ErrNoTypeCheck = errors.New("can't typecheck file")
-
-// StructsFromSource retrieves all structs with their fields and their memory
-// structure from the content of a file.
-func StructsFromSource(filename string, content []byte) ([]Struct, error) {
+func StructsFromFile(filename string, content []byte) ([]Struct, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filename, content, 0)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse file %s: %s", filename, err)
 	}
 
-	config := types.Config{
-		Importer:                 importer.Default(),
-		IgnoreFuncBodies:         true,
-		FakeImportC:              true,
-		DisableUnusedImportCheck: true,
-	}
-
-	pkg, err := config.Check(filename, fset, []*ast.File{f}, nil)
+	files, err := filepath.Glob(filepath.Join(filepath.Dir(filename), "*.go"))
 	if err != nil {
-		log.Errorf(err, "can't type check file: %s", filename)
-		return nil, ErrNoTypeCheck
+		return nil, err
 	}
 
-	scope := pkg.Scope()
+	conf := loader.Config{
+		Build: &build.Default,
+	}
+
+	if _, err = conf.FromArgs(files, true); err != nil {
+		return nil, err
+	}
+
+	lprog, err := conf.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	scope := lprog.InitialPackages()[0].Pkg.Scope()
 
 	var result []Struct
 	for _, name := range scope.Names() {

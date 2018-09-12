@@ -1,9 +1,11 @@
 package memlayout
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -44,6 +46,11 @@ func (a *Analyzer) NotifyReviewEvent(ctx context.Context, review *lookout.Review
 		return nil, fmt.Errorf("error getting changes from data server %s", a.dataServer)
 	}
 
+	repoPath, err := clone(review)
+	if err != nil {
+		return nil, fmt.Errorf("unable to clone repo: %s", err)
+	}
+
 	var comments []*lookout.Comment
 	for {
 		change, err := changes.Recv()
@@ -54,7 +61,7 @@ func (a *Analyzer) NotifyReviewEvent(ctx context.Context, review *lookout.Review
 			return nil, fmt.Errorf("could not receive changes from data server %s", a.dataServer)
 		}
 
-		comments = append(comments, commentsForChanges(change)...)
+		comments = append(comments, commentsForChanges(repoPath, change)...)
 	}
 
 	return &lookout.EventResponse{
@@ -68,14 +75,14 @@ func (*Analyzer) NotifyPushEvent(context.Context, *lookout.PushEvent) (*lookout.
 	return &lookout.EventResponse{}, nil
 }
 
-func commentsForChanges(change *lookout.Change) []*lookout.Comment {
+func commentsForChanges(repoPath string, change *lookout.Change) []*lookout.Comment {
 	if change.Head == nil {
 		return nil
 	}
 
 	log.Infof("analyzing %q", change.Head.Path)
 
-	headStructs, err := StructsFromSource(change.Head.Path, change.Head.Content)
+	headStructs, err := StructsFromFile(filepath.Join(repoPath, change.Head.Path), change.Head.Content)
 	if err != nil {
 		log.Errorf(err, "unable to get structs from head revision")
 		return nil
@@ -89,55 +96,45 @@ func commentsForChanges(change *lookout.Change) []*lookout.Comment {
 	log.Debugf("structs found in HEAD: %s", strings.Join(structNames, ", "))
 
 	var base []byte
-	var baseStructs []Struct
 	if change.Base != nil {
 		base = change.Base.Content
-		baseStructs, err = StructsFromSource(change.Base.Path, change.Base.Content)
-		if err != nil {
-			log.Errorf(err, "unable to get structs from base revision")
-			return nil
-		}
-
-		var structNames []string
-		for _, s := range headStructs {
-			structNames = append(structNames, s.Name)
-		}
-
-		log.Debugf("structs found in base: %s", strings.Join(structNames, ", "))
 	}
 
 	changed := ChangedStructs(
 		base, change.Head.Content,
-		baseStructs, headStructs,
+		headStructs,
 	)
 
 	structNames = make([]string, 0, len(changed))
 	for _, s := range changed {
-		structNames = append(structNames, s.Head.Name)
+		structNames = append(structNames, s.Name)
 	}
 
 	log.Debugf("these structs changed: %s", strings.Join(structNames, ", "))
 
 	var result []*lookout.Comment
 	for _, c := range changed {
-		optimized := Optimize(c.Head)
-		log.Debugf("for struct %q padding was %d, but could be optimized to %d", c.Head.Name, c.Head.Padding(), optimized.Padding())
-		if optimized.Padding() >= c.Head.Padding() {
+		optimized := Optimize(c)
+		log.Debugf("for struct %q padding was %d, but could be optimized to %d", c.Name, c.Padding(), optimized.Padding())
+		if optimized.Padding() >= c.Padding() {
 			continue
 		}
 
 		var comment = &lookout.Comment{
-			Line: int32(c.Head.Start),
+			Line: int32(c.Start),
 			File: change.Head.Path,
 		}
-		if c.Base != nil && c.Base.Padding() < c.Head.Padding() {
-			comment.Text = fmt.Sprintf("We've detected the padding has increased since the base revision, but the memory layout could be improved to reduce the padding.")
-		} else {
-			comment.Text = "We've detected the memory layout could be improved to reduce padding."
-		}
 
-		comment.Text += fmt.Sprintf("\nHere's the proposed layout:\n\n```go\n%s\n```", optimized)
-		log.Debugf("comment was added with suggestions for struct %s", c.Head.Name)
+		var buf bytes.Buffer
+		buf.WriteString("We've detected the memory layout could be improved to reduce padding.")
+		buf.WriteString("\n\n**Struct info:**\n")
+		for _, f := range c.Fields {
+			buf.WriteString(f.String())
+			buf.WriteRune('\n')
+		}
+		buf.WriteString(fmt.Sprintf("\nHere's the proposed layout:\n\n```go\n%s\n```", optimized))
+		log.Debugf("comment was added with suggestions for struct %s", c.Name)
+		comment.Text = buf.String()
 		result = append(result, comment)
 	}
 

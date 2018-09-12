@@ -18,24 +18,15 @@ type ChangedStruct struct {
 // ChangedStructs returns all the changed structs in the diff.
 func ChangedStructs(
 	base, head []byte,
-	baseStructs, headStructs []Struct,
-) []ChangedStruct {
+	structs []Struct,
+) []Struct {
 	lines := changedLines(base, head)
 
-	var baseStructsByName = make(map[string]*Struct)
-	for _, s := range baseStructs {
-		baseStructsByName[s.Name] = &s
-	}
-
-	var result []ChangedStruct
-	for _, s := range headStructs {
+	var result []Struct
+	for _, s := range structs {
 		for _, l := range lines {
 			if l >= s.Start && l <= s.End {
-				base := baseStructsByName[s.Name]
-				result = append(result, ChangedStruct{
-					Base: base,
-					Head: s,
-				})
+				result = append(result, s)
 				break
 			}
 		}

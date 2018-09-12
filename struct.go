@@ -2,6 +2,7 @@ package memlayout
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/build"
 	"go/printer"
@@ -37,6 +38,15 @@ type Field struct {
 	IsPadding bool
 	Children  []Field
 	field     *types.Var
+}
+
+func (f Field) String() string {
+	if f.IsPadding {
+		return fmt.Sprintf("*%s: %d-%d (size %d, align %d)*",
+			"padding", f.Start, f.End, f.Size, f.Align)
+	}
+	return fmt.Sprintf("%s %s: %d-%d (size %d, align %d)",
+		f.Name, f.Type, f.Start, f.End, f.Size, f.Align)
 }
 
 func structType(fields []Field) *ast.StructType {
