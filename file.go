@@ -4,9 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
+
+	log "gopkg.in/src-d/go-log.v1"
 )
 
 // ErrNoTypeCheck is returned when the source cannot be type checked.
@@ -22,6 +25,7 @@ func StructsFromSource(filename string, content []byte) ([]Struct, error) {
 	}
 
 	config := types.Config{
+		Importer:                 importer.Default(),
 		IgnoreFuncBodies:         true,
 		FakeImportC:              true,
 		DisableUnusedImportCheck: true,
@@ -29,6 +33,7 @@ func StructsFromSource(filename string, content []byte) ([]Struct, error) {
 
 	pkg, err := config.Check(filename, fset, []*ast.File{f}, nil)
 	if err != nil {
+		log.Errorf(err, "can't type check file: %s", filename)
 		return nil, ErrNoTypeCheck
 	}
 

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/mloncode/memlayout"
 	"google.golang.org/grpc"
@@ -29,6 +30,7 @@ func main() {
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {
 		log.Errorf(err, "failed to listen on port: %d", port)
+		os.Exit(1)
 	}
 
 	opts := []grpc.ServerOption{
