@@ -79,5 +79,15 @@ func TestChangedStructs(t *testing.T) {
 		},
 	}
 
-	require.Equal(expected, changed)
+	require.Len(changed, len(expected))
+	for i := range expected {
+		if expected[i].Base == nil {
+			require.Nil(changed[i].Base)
+		} else {
+			require.NotNil(changed[i].Base)
+			structsEqual(t, *expected[i].Base, *changed[i].Base)
+		}
+
+		structsEqual(t, expected[i].Head, changed[i].Head)
+	}
 }

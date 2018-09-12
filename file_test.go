@@ -54,7 +54,10 @@ func TestStructsFromSource(t *testing.T) {
 		}},
 	}
 
-	require.Equal(expected, structs)
+	require.Len(structs, len(expected))
+	for i := range expected {
+		structsEqual(t, expected[i], structs[i])
+	}
 }
 
 func f(

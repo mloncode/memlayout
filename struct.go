@@ -36,6 +36,7 @@ type Field struct {
 	Align     int64
 	IsPadding bool
 	Children  []Field
+	field     *types.Var
 }
 
 func structType(fields []Field) *ast.StructType {
@@ -102,14 +103,15 @@ func Fields(typ *types.Struct) []Field {
 	return sizes(typ, 0)
 }
 
+var gcSizes = gcsizes.ForArch(build.Default.GOARCH)
+
 func sizes(typ *types.Struct, base int64) (out []Field) {
-	s := gcsizes.ForArch(build.Default.GOARCH)
 	n := typ.NumFields()
 	var fields []*types.Var
 	for i := 0; i < n; i++ {
 		fields = append(fields, typ.Field(i))
 	}
-	offsets := s.Offsetsof(fields)
+	offsets := gcSizes.Offsetsof(fields)
 	for i := range offsets {
 		offsets[i] += base
 	}
@@ -127,7 +129,7 @@ func sizes(typ *types.Struct, base int64) (out []Field) {
 			pos += padding
 		}
 
-		size := s.Sizeof(field.Type())
+		size := gcSizes.Sizeof(field.Type())
 		if typ2, ok := field.Type().Underlying().(*types.Struct); ok && typ2.NumFields() != 0 {
 			out = append(out, Field{
 				Name:     field.Name(),
@@ -135,8 +137,9 @@ func sizes(typ *types.Struct, base int64) (out []Field) {
 				Start:    offsets[i],
 				End:      offsets[i] + size,
 				Size:     size,
-				Align:    s.Alignof(field.Type()),
+				Align:    gcSizes.Alignof(field.Type()),
 				Children: sizes(typ2, pos),
+				field:    field,
 			})
 		} else {
 			out = append(out, Field{
@@ -145,7 +148,8 @@ func sizes(typ *types.Struct, base int64) (out []Field) {
 				Start: offsets[i],
 				End:   offsets[i] + size,
 				Size:  size,
-				Align: s.Alignof(field.Type()),
+				Align: gcSizes.Alignof(field.Type()),
+				field: field,
 			})
 		}
 		pos += size
@@ -159,7 +163,7 @@ func sizes(typ *types.Struct, base int64) (out []Field) {
 		field.Size = 1
 		field.End++
 	}
-	pad := s.Sizeof(typ) - field.End
+	pad := gcSizes.Sizeof(typ) - field.End
 	if pad > 0 {
 		out = append(out, Field{
 			IsPadding: true,
@@ -188,7 +192,21 @@ func Optimize(s Struct) Struct {
 	}
 
 	sortFields(fields)
-	return Struct{Name: s.Name, Pos: s.Pos, Fields: addPadding(fields)}
+
+	var typeFields = make([]*types.Var, len(fields))
+	for i, f := range fields {
+		if !f.IsPadding {
+			typeFields[i] = f.field
+		}
+	}
+
+	fieldsWithPadding := Fields(types.NewStruct(typeFields, nil))
+
+	return Struct{
+		Name:   s.Name,
+		Pos:    s.Pos,
+		Fields: fieldsWithPadding,
+	}
 }
 
 func sortFields(fields []Field) {
@@ -222,42 +240,4 @@ func (s byAlignSizeAndName) Less(i, j int) bool {
 	}
 
 	return strings.Compare(s[i].Name, s[j].Name) < 0
-}
-
-func addPadding(fs []Field) []Field {
-	var result []Field
-	var total int64
-	for _, f := range fs {
-		if len(f.Children) > 0 {
-			f.Children = addPadding(f.Children)
-		}
-
-		f.Size = Struct{Fields: f.Children}.Size()
-		f.Start = total
-		f.End = f.Start + f.Size
-		result = append(result, f)
-		total += f.Size
-
-		if total%8 != 0 {
-			padding := 8*(total/8+1) - total
-			result = append(result, Field{
-				Start:     total,
-				End:       total + padding,
-				Size:      padding,
-				IsPadding: true,
-			})
-		}
-	}
-
-	if total%8 != 0 {
-		padding := 8*(total/8+1) - total
-		result = append(result, Field{
-			Start:     total,
-			End:       total + padding,
-			Size:      padding,
-			IsPadding: true,
-		})
-	}
-
-	return result
 }
